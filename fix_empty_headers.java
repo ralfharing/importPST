@@ -4,14 +4,30 @@ import javax.mail.*;
 import javax.mail.internet.*;
 import com.sun.mail.imap.*;
 
-public class fix_empty_headers {
+public class fix_empty_headers{
+    static String user = "";
+    static String password = "";
+
     public static void main(String args[]){
+        for(int flag = 0; flag < args.length; flag++){
+            if(args[flag].equals("-u")){
+                user = args[++flag];
+            }else if(args[flag].equals("-p")){
+                password = args[++flag];
+            }
+        }
+        
+        if(user.isEmpty() || password.isEmpty()){
+            System.out.println("Usage: fix_empty_headers -u user -p password");
+            System.exit(1);
+        }
+
         Properties props = System.getProperties();
         props.setProperty("mail.store.protocol", "imaps");
         try{
             Session session = Session.getDefaultInstance(props, null);
             Store store = session.getStore("imaps");
-            store.connect("imap.gmail.com", "user", "pwd");
+            store.connect("imap.gmail.com", user, password);
             System.out.println(store);
             System.out.println(store.getDefaultFolder().getURLName());
             System.out.println(store.getDefaultFolder().list());
@@ -27,7 +43,7 @@ public class fix_empty_headers {
                 System.out.println(folder);
                 System.out.println(folder.getName());
             }
-            Folder[] un = store.getUserNamespaces("user");
+            Folder[] un = store.getUserNamespaces(user);
             for(Folder folder:un){
                 System.out.println('3');
                 System.out.println(folder);
@@ -47,9 +63,9 @@ public class fix_empty_headers {
                 System.out.println("from: " + im.getFrom().length);
                 System.out.println("from: " + im.getFrom()[0]);
                 System.out.println("recipients: " + im.getAllRecipients());
-//                System.out.println(im.getRecipients(TO));
-//                System.out.println(im.getRecipients(CC));
-//                System.out.println(im.getRecipients(BCC));
+                System.out.println("to: " + im.getRecipients(Message.RecipientType.TO));
+                System.out.println("cc: " + im.getRecipients(Message.RecipientType.CC));
+                System.out.println("bcc: " + im.getRecipients(Message.RecipientType.BCC));
                 System.out.println("headerlines: " + im.getAllHeaderLines());
             }
         }catch(NoSuchProviderException e){
