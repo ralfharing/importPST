@@ -1,9 +1,14 @@
 
 import java.io.*;
 import java.util.*;
+import java.net.*;
 import javax.mail.*;
 import javax.mail.internet.*;
 import com.sun.mail.imap.*;
+import com.google.gdata.client.docs.DocsService;
+import com.google.gdata.data.docs.SpreadsheetEntry;
+import com.google.gdata.data.PlainTextConstruct;
+import com.google.gdata.util.ServiceException;
 
 public class fix_empty_headers{
     // command line flags
@@ -211,6 +216,32 @@ public class fix_empty_headers{
         }
     }
 
+    // Create a google spreadsheet to store the addresses that are found.
+    // Record header address, and if possible personal name and email.
+    // If the header is malformed, only record header and user will need
+    // to fill in the personal and email manually.
+    // Then when program is rerun, the spreadsheet will be the database
+    // to lookup and fix all the malformed headers.
+    public static void createSpreadsheet(){
+        try{
+            DocsService service = new DocsService("fix_empty_headers-v1");
+            service.setUserCredentials(user, password);
+            SpreadsheetEntry newEntry = new SpreadsheetEntry();
+            newEntry.setTitle(new PlainTextConstruct("fix_empty_headers_addresses"));
+            service.insert(new URL("https://docs.google.com/feeds/default/private/full/"), newEntry);
+            // TODO: use spreadsheet api to add addresses to spreadsheet
+        }catch(MalformedURLException e){
+            e.printStackTrace();
+            System.exit(1);
+        }catch(IOException e){
+            e.printStackTrace();
+            System.exit(1);
+        }catch(ServiceException e){
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+
     public static void main(String args[]){
         validateArgs(args);
 
@@ -223,6 +254,7 @@ public class fix_empty_headers{
 
             getLabels(store);
             parseFolders(store);
+            createSpreadsheet();
 System.exit(0);
 
             // parses "All Mail"
