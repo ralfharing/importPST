@@ -9,6 +9,8 @@ import com.google.gdata.client.docs.DocsService;
 import com.google.gdata.data.docs.SpreadsheetEntry;
 import com.google.gdata.data.PlainTextConstruct;
 import com.google.gdata.util.ServiceException;
+import com.google.gdata.data.spreadsheet.*;
+import com.google.gdata.client.spreadsheet.*;
 
 public class fix_empty_headers{
     // command line flags
@@ -27,7 +29,7 @@ public class fix_empty_headers{
     private static HashSet<Folder> labels = new HashSet<Folder>();
 
     // list of all addresses
-    private static HashSet<Address> addresses = new HashSet<Address>();
+    private static HashSet<InternetAddress> addresses = new HashSet<InternetAddress>();
 
     private static void validateArgs(String args[]){
         for(int flag = 0; flag < args.length; flag++){
@@ -220,16 +222,90 @@ public class fix_empty_headers{
     // Record header address, and if possible personal name and email.
     // If the header is malformed, only record header and user will need
     // to fill in the personal and email manually.
+    //
     // Then when program is rerun, the spreadsheet will be the database
     // to lookup and fix all the malformed headers.
     public static void createSpreadsheet(){
         try{
-            DocsService service = new DocsService("fix_empty_headers-v1");
-            service.setUserCredentials(user, password);
-            SpreadsheetEntry newEntry = new SpreadsheetEntry();
-            newEntry.setTitle(new PlainTextConstruct("fix_empty_headers_addresses"));
-            service.insert(new URL("https://docs.google.com/feeds/default/private/full/"), newEntry);
-            // TODO: use spreadsheet api to add addresses to spreadsheet
+            DocsService docService = new DocsService("fix_empty_headers-v1");
+            docService.setUserCredentials(user, password);
+            SpreadsheetEntry newSheet = new SpreadsheetEntry();
+            newSheet.setTitle(new PlainTextConstruct("fix_empty_headers_addresses"));
+            docService.insert(new URL("https://docs.google.com/feeds/default/private/full/"), newSheet);
+
+            // TODO: use spreadsheet table api to create table to store addresses
+            TableEntry table = new TableEntry();
+            table.setTitle(new PlainTextConstruct("list of addresses"));
+            table.setWorksheet(new Worksheet("Sheet 1"));
+            table.setHeader(new com.google.gdata.data.spreadsheet.Header(1));
+
+            Data tableData = new Data();
+            tableData.setStartIndex(2);
+            tableData.addColumn(new Column("A", "existing header"));
+            tableData.addColumn(new Column("B", "email address"));
+            tableData.addColumn(new Column("C", "personal name"));
+            table.setData(tableData);
+
+            SpreadsheetService sheetService = new SpreadsheetService("fix_empty_headers-v1");
+            sheetService.setUserCredentials(user, password);
+            FeedURLFactory factory = FeedURLFactory.getDefault();
+            URL sheetfeedUrl = factory.getSpreadsheetsFeedUrl();
+            SpreadsheetFeed sheetFeed = sheetService.getFeed(sheetfeedUrl, SpreadsheetFeed.class);
+            com.google.gdata.data.spreadsheet.SpreadsheetEntry sheetEntry = null;
+            for(com.google.gdata.data.spreadsheet.SpreadsheetEntry se : sheetFeed.getEntries()){
+                if(se.getTitle().getPlainText().equalsIgnoreCase("fix_empty_headers_addresses"))
+                    sheetEntry = se;
+                    break;
+            }
+
+            URL tableFeedUrl = factory.getTableFeedUrl(sheetEntry.getKey());
+            sheetService.insert(tableFeedUrl, table);
+
+            // TODO: use spreadsheet record api to add addresses
+            TableFeed tableFeed = sheetService.getFeed(tableFeedUrl, TableFeed.class);
+            TableEntry tableEntry = null;
+            for(TableEntry te : tableFeed.getEntries()){
+                if(te.getTitle().getPlainText().equalsIgnoreCase("list of addresses"))
+                    tableEntry = te;
+//This returns null??
+//System.out.println(tableEntry.getRecordsFeedLink().getHref());
+//System.exit(0);
+                    break;
+            }
+
+            for(InternetAddress address : addresses){
+                RecordEntry record = new RecordEntry();
+                String recAddress = address.toString();
+                String recEmail = address.getAddress();
+                String recPersonal = address.getPersonal();
+                System.out.println();
+                System.out.println(recAddress);
+                System.out.println(recEmail);
+                System.out.println(recPersonal);
+                record.addField(new Field(null, "existing header", recAddress));
+                try{
+                    address.validate();
+                    if(recEmail != null && !recEmail.trim().isEmpty()){
+                        record.addField(new Field(null, "email address", recEmail));
+                    }
+                    if(recPersonal != null && !recPersonal.trim().isEmpty()){
+                        record.addField(new Field(null, "personal name", recPersonal));
+                    }
+                }catch(AddressException e){}
+                //record.addField(new Field(null, "existing header", "<Last, First M>"));
+                //record.addField(new Field(null, "email address", "first.last@abc.com"));
+                //record.addField(new Field(null, "personal name", "First Last"));
+
+                //URL feedURL = new URL(tableEntry.getRecordsFeedLink().getHref());
+                //System.out.println(tableEntry.getRecordsFeedLink().getHref());
+
+                // TODO: should be able to do this, but there doesn't seem to be a
+                // nice way to get the table id. TableEntry.getId() returns a full
+                // url and not just the id.
+                //URL recordFeedUrl = factory.getRecordFeedUrl(sheetEntry.getKey(), tableEntry.getId());
+                URL recordFeedUrl = new URL(tableEntry.getId().toString().replace("tables", "records"));
+                sheetService.insert(recordFeedUrl, record);
+            }
         }catch(MalformedURLException e){
             e.printStackTrace();
             System.exit(1);
