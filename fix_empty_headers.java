@@ -1,4 +1,9 @@
 
+// dependencies:
+// gdata-src.java-1.42.0
+// guava-r07
+// javamail-1.4.3
+
 import java.io.*;
 import java.util.*;
 import java.net.*;
@@ -8,7 +13,7 @@ import com.sun.mail.imap.*;
 import com.google.gdata.client.docs.DocsService;
 import com.google.gdata.data.docs.SpreadsheetEntry;
 import com.google.gdata.data.PlainTextConstruct;
-import com.google.gdata.util.ServiceException;
+import com.google.gdata.util.*;
 import com.google.gdata.data.spreadsheet.*;
 import com.google.gdata.client.spreadsheet.*;
 
@@ -81,140 +86,120 @@ public class fix_empty_headers{
 
     // look through all folders under root, ignore system folders,
     // and store user's labels
-    private static void getLabels(Store store){
-        try{
-            Folder[] dfl = store.getDefaultFolder().list();
-            for(Folder folder : dfl){
-                String name = folder.getName();
-                if(!(name.equalsIgnoreCase(inboxName) ||
-                     name.equalsIgnoreCase("Junk E-mail") ||
-                     name.equalsIgnoreCase("[Gmail]"))){
-                    //System.out.println(folder);
-                    labels.add(folder);
-                }
+    private static void getLabels(Store store) throws MessagingException{
+        Folder[] dfl = store.getDefaultFolder().list();
+        for(Folder folder : dfl){
+            String name = folder.getName();
+            if(!(name.equalsIgnoreCase(inboxName) ||
+                 name.equalsIgnoreCase("Junk E-mail") ||
+                 name.equalsIgnoreCase("[Gmail]"))){
+                //System.out.println(folder);
+                labels.add(folder);
             }
-            System.out.println("LABELS: " + labels);
-        }catch(MessagingException e){
-            e.printStackTrace();
-            System.exit(1);
         }
+        System.out.println("LABELS: " + labels);
     }
 
     // Set up connection to Google Spreadsheet API once each pass. If you do
     // it too many times, it sees that as suspicious behavior and a Captcha
     // Request Exception is thrown.
-    private static void createSpreadsheetService(TableEntry table){
-        try{
-            if(sheetService == null){
-                // use spreadsheet api to get spreadsheet
-                sheetService = new SpreadsheetService(serviceName);
-                sheetService.setUserCredentials(user, password);
-                FeedURLFactory factory = FeedURLFactory.getDefault();
-                URL sheetfeedUrl = factory.getSpreadsheetsFeedUrl();
-                SpreadsheetFeed sheetFeed = sheetService.getFeed(sheetfeedUrl, SpreadsheetFeed.class);
-                com.google.gdata.data.spreadsheet.SpreadsheetEntry sheetEntry = null;
-                for(com.google.gdata.data.spreadsheet.SpreadsheetEntry se : sheetFeed.getEntries()){
-                    if(se.getTitle().getPlainText().equalsIgnoreCase(sheetName))
-                        sheetEntry = se;
-                        break;
-                }
-
-                URL tableFeedUrl = factory.getTableFeedUrl(sheetEntry.getKey());
-                if(table != null){
-                    // Only create the table in the first pass. In the second
-                    // it is already there and we are reading it.
-                    sheetService.insert(tableFeedUrl, table);
-                }
-
-                // use spreadsheet api to get table
-                TableFeed tableFeed = sheetService.getFeed(tableFeedUrl, TableFeed.class);
-                TableEntry tableEntry = null;
-                for(TableEntry te : tableFeed.getEntries()){
-                    if(te.getTitle().getPlainText().equalsIgnoreCase(tableName))
-                        tableEntry = te;
-                        break;
-                }
-
-                // Why does getId() return a full url? Issue opened at
-                // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2346
-                // and discussed at
-                // https://groups.google.com/forum/#topic/google-spreadsheets-api/m4X6E-V12-U
-                //recordFeedUrl = factory.getRecordFeedUrl(sheetEntry.getKey(), tableEntry.getId());
-
-                // Alternative solution, but also doesn't work.
-                // Why does this return null? Issue opened at
-                // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2348
-                // and discussed at
-                // https://groups.google.com/forum/#topic/google-spreadsheets-api/m4X6E-V12-U
-                //recordFeedUrl = new URL(tableEntry.getRecordsFeedLink().getHref());
-
-                // Manually hack a solution.
-                recordFeedUrl = new URL(tableEntry.getId().toString().replace("tables", "records"));
+    private static void createSpreadsheetService(TableEntry table) throws IOException, ServiceException{
+        if(sheetService == null){
+            // use spreadsheet api to get spreadsheet
+            sheetService = new SpreadsheetService(serviceName);
+            sheetService.setUserCredentials(user, password);
+            FeedURLFactory factory = FeedURLFactory.getDefault();
+            URL sheetfeedUrl = factory.getSpreadsheetsFeedUrl();
+            SpreadsheetFeed sheetFeed = sheetService.getFeed(sheetfeedUrl, SpreadsheetFeed.class);
+            com.google.gdata.data.spreadsheet.SpreadsheetEntry sheetEntry = null;
+            for(com.google.gdata.data.spreadsheet.SpreadsheetEntry se : sheetFeed.getEntries()){
+                if(se.getTitle().getPlainText().equalsIgnoreCase(sheetName))
+                    sheetEntry = se;
+                    break;
             }
-        }catch(IOException e){
-            e.printStackTrace();
-            System.exit(1);
-        }catch(ServiceException e){
-            e.printStackTrace();
-            System.exit(1);
+
+            URL tableFeedUrl = factory.getTableFeedUrl(sheetEntry.getKey());
+            if(table != null){
+                // Only create the table in the first pass. In the second
+                // it is already there and we are reading it.
+                sheetService.insert(tableFeedUrl, table);
+            }
+
+            // use spreadsheet api to get table
+            TableFeed tableFeed = sheetService.getFeed(tableFeedUrl, TableFeed.class);
+            TableEntry tableEntry = null;
+            for(TableEntry te : tableFeed.getEntries()){
+                if(te.getTitle().getPlainText().equalsIgnoreCase(tableName))
+                    tableEntry = te;
+                    break;
+            }
+
+            // Why does getId() return a full url? Issue opened at
+            // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2346
+            // and discussed at
+            // https://groups.google.com/forum/#topic/google-spreadsheets-api/m4X6E-V12-U
+            //recordFeedUrl = factory.getRecordFeedUrl(sheetEntry.getKey(), tableEntry.getId());
+
+            // Alternative solution, but also doesn't work.
+            // Why does this return null? Issue opened at
+            // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2348
+            // and discussed at
+            // https://groups.google.com/forum/#topic/google-spreadsheets-api/m4X6E-V12-U
+            //recordFeedUrl = new URL(tableEntry.getRecordsFeedLink().getHref());
+
+            // Manually hack a solution.
+            recordFeedUrl = new URL(tableEntry.getId().toString().replace("tables", "records"));
         }
     }
 
     // Look up the address in the google spreadsheet created in the first
     // pass and set the 
-    private static RecordEntry lookupAddress(InternetAddress address){
+    private static RecordEntry lookupAddress(InternetAddress address) throws IOException, ServiceException{
+        // see note in createSpreadsheet() for why quotes and carriage
+        // returns are replaced
+        String lookupColumn = headerColumn;
+        String lookupValue = address.toString().replace("\"", "").replaceAll("\\r\\n", "");
+
         try{
-            // see note in createSpreadsheet() for why quotes and carriage
-            // returns are replaced
-            String lookupColumn = headerColumn;
-            String lookupValue = address.toString().replace("\"", "").replaceAll("\\r\\n", "");
+            // If the address we're looking up is valid, then a simpler
+            // lookup is on the email address itself. Saw issues with
+            // two valid addresses where only one was added to the
+            // spreadsheet because the hashset during the first pass had
+            // filtered out one. The .equals() method checked the email
+            // address and not the full header.
+            address.validate();
+            lookupColumn = emailColumn;
+            lookupValue = address.getAddress().replace("\"", "").replaceAll("\\r\\n", "");
+        }catch(AddressException e){}
 
-            try{
-                // If the address we're looking up is valid, then a simpler
-                // lookup is on the email address itself. Saw issues with
-                // two valid addresses where only one was added to the
-                // spreadsheet because the hashset during the first pass had
-                // filtered out one. The .equals() method checked the email
-                // address and not the full header.
-                address.validate();
-                lookupColumn = emailColumn;
-                lookupValue = address.getAddress().replace("\"", "").replaceAll("\\r\\n", "");
-            }catch(AddressException e){}
+        createSpreadsheetService(null);
+        RecordQuery query = new RecordQuery(recordFeedUrl);
 
-            createSpreadsheetService(null);
-            RecordQuery query = new RecordQuery(recordFeedUrl);
+        // put query and columns in double quotes since they can contain spaces
+        query.setSpreadsheetQuery("\"" + lookupColumn + "\" = \"" + lookupValue + "\"");
+        //System.out.println(query.getSpreadsheetQuery());
+        //System.out.println(query.getUrl());
+        RecordFeed recordFeed = sheetService.query(query, RecordFeed.class);
 
-            // put query and columns in double quotes since they can contain spaces
-            query.setSpreadsheetQuery("\"" + lookupColumn + "\" = \"" + lookupValue + "\"");
-            //System.out.println(query.getSpreadsheetQuery());
-            //System.out.println(query.getUrl());
-            RecordFeed recordFeed = sheetService.query(query, RecordFeed.class);
+        // Why does getTotalResults() ignore the query and always return
+        // the total number of rows? Issue opened at
+        // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2351
+        // and discussed at
+        // https://groups.google.com/forum/#topic/google-spreadsheets-api/2fo9xuMt5KA
+        //if(recordFeed.getTotalResults() != 1){
 
-            // Why does getTotalResults() ignore the query and always return
-            // the total number of rows? Issue opened at
-            // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2351
-            // and discussed at
-            // https://groups.google.com/forum/#topic/google-spreadsheets-api/2fo9xuMt5KA
-            //if(recordFeed.getTotalResults() != 1){
-
-            List<RecordEntry> entries = recordFeed.getEntries();
-            if(entries.size() < 1){
-                // There should always be at least one entry.
-                System.out.println("ERROR: address not found: " + address);
-                System.exit(1);
-            }
-
-            for(RecordEntry re : entries){
-                // Usually just one entry, but if multiple any one will do.
-                return re;
-            }
-        }catch(IOException e){
-            e.printStackTrace();
-            System.exit(1);
-        }catch(ServiceException e){
-            e.printStackTrace();
+        List<RecordEntry> entries = recordFeed.getEntries();
+        if(entries.size() < 1){
+            // There should always be at least one entry.
+            System.out.println("ERROR: address not found: " + address);
             System.exit(1);
         }
+
+        for(RecordEntry re : entries){
+            // Usually just one entry, but if multiple any one will do.
+            return re;
+        }
+
         // should never get here
         return null;
     }
@@ -226,9 +211,11 @@ public class fix_empty_headers{
     // e.g. getReplyTo will return the contents of getFrom if there is no
     // reply-to header. Values will wind up being added in places that they
     // shouldn't be after cleaning.
-    private static MimeMessage getHeaders(MimeMessage message, String headerType, MimeMessage fixedMessage){
+    private static MimeMessage getHeaders(MimeMessage message, String headerType, MimeMessage fixedMessage) throws ServiceException, UnsupportedEncodingException, IOException, MessagingException{
+        String header = "";
+
         try{
-            String header = message.getHeader(headerType, ",");
+            header = message.getHeader(headerType, ",");
             if(header != null){
                 InternetAddress[] addressList = InternetAddress.parseHeader(header, true);
                 //System.out.println("# " + headerType + ": " + addressList.length);
@@ -275,11 +262,11 @@ public class fix_empty_headers{
                 }
             }
         }catch(MessagingException e){
-            e.printStackTrace();
-            System.exit(1);
+            System.out.println("headerType [" + headerType + "] header [" + header + "]");
+            throw e;
         }catch(UnsupportedEncodingException e){
-            e.printStackTrace();
-            System.exit(1);
+            System.out.println("headerType [" + headerType + "] header [" + header + "]");
+            throw e;
         }
         return fixedMessage;
     }
@@ -288,7 +275,8 @@ public class fix_empty_headers{
     // can contain addresses. I think there are still others like
     // Resent-Sender, Resent-From, Resent-Reply-To, Resent-To, Resent-Cc, and
     // Resent-Bcc which are not used frequently.
-    private static void getMessagesFromLabel(Folder folder, Folder trash){
+    private static void getMessagesFromLabel(Folder folder, Folder trash) throws MessagingException, ServiceException, UnsupportedEncodingException, IOException{
+        int count = 0;
         try{
             if(updateHeaders){
                 folder.open(Folder.READ_WRITE);
@@ -300,7 +288,23 @@ public class fix_empty_headers{
             Message messages[] = folder.getMessages();
             System.out.println("Reading " + messages.length + " messages in " + folder.getFullName());
 
+            // pre-fetch the headers relevant for addresses en masse
+            FetchProfile fp = new FetchProfile();
+            fp.add(FetchProfile.Item.ENVELOPE);
+            fp.add("Sender");
+            fp.add("From");
+            fp.add("To");
+            fp.add("Cc");
+            fp.add("Bcc");
+            fp.add("Reply-To");
+            folder.fetch(messages, fp);
+
             for(Message message : messages){
+                count++;
+                //if(count % 100 == 0){
+                //    System.out.println("Parsing message " + count + ". " + addresses.size() + " addresses found.");
+                //}
+
                 // cast to MimeMessage to be able to use getHeader() later
                 MimeMessage mm = (MimeMessage)message;
 
@@ -331,7 +335,7 @@ public class fix_empty_headers{
                 //}
             }
 
-            System.out.println("Finished reading messages from " + folder.getFullName());
+            System.out.println("Finished reading messages from " + folder.getFullName() + ". " + addresses.size() + " addresses found.");
 
             if(updateHeaders){
                 System.out.println("Moving " + messages.length + " old messages to trash");
@@ -358,8 +362,8 @@ public class fix_empty_headers{
 
             folder.close(false);
         }catch(MessagingException e){
-            e.printStackTrace();
-            System.exit(1);
+            System.out.println("Died on message " + count + ". " + addresses.size() + " addresses found.");
+            throw e;
         }
     }
 
@@ -376,24 +380,19 @@ public class fix_empty_headers{
     // list created for later upload to a google spreadsheet. The second time,
     // the headers are parsed and fixed based on the contents of the google
     // spreadsheet.
-    private static void parseBadHeaders(Store store){
-        try{
-            Folder trash = store.getFolder(trashbox);
+    private static void parseBadHeaders(Store store) throws MessagingException, ServiceException, UnsupportedEncodingException, IOException{
+        Folder trash = store.getFolder(trashbox);
 
-            Folder sentmail = store.getFolder(sentmailbox);
-            getMessagesFromLabel(sentmail, trash);
+        Folder sentmail = store.getFolder(sentmailbox);
+        getMessagesFromLabel(sentmail, trash);
 
-            if(checkInbox){
-                Folder inbox = store.getFolder(inboxName);
-                getMessagesFromLabel(inbox, trash);
-            }else if(checkLabels){
-                for(Folder label : labels){
-                    getMessagesFromLabel(label, trash);
-                }
+        if(checkInbox){
+            Folder inbox = store.getFolder(inboxName);
+            getMessagesFromLabel(inbox, trash);
+        }else if(checkLabels){
+            for(Folder label : labels){
+                getMessagesFromLabel(label, trash);
             }
-        }catch(MessagingException e){
-            e.printStackTrace();
-            System.exit(1);
         }
     }
 
@@ -405,7 +404,10 @@ public class fix_empty_headers{
     //
     // Then when program is rerun, the spreadsheet will be the database
     // to lookup and fix all the malformed headers.
-    public static void createSpreadsheet(){
+    public static void createSpreadsheet() throws IOException, ServiceException{
+        String recAddress = "";
+        String recEmail = "";
+        String recPersonal = "";
         try{
             // use doclist api to create a new spreadsheet
             DocsService docService = new DocsService(serviceName);
@@ -443,9 +445,9 @@ public class fix_empty_headers{
                 // http://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=2357
                 // and discussed at
                 // https://groups.google.com/forum/#topic/google-spreadsheets-api/IWtyOb7Z6vI
-                String recAddress = address.toString().replace("\"", "").replaceAll("\\r\\n", "");
-                String recEmail = address.getAddress().replace("\"", "").replaceAll("\\r\\n", "");
-                String recPersonal = address.getPersonal();
+                recAddress = address.toString().replace("\"", "").replaceAll("\\r\\n", "");
+                recEmail = address.getAddress().replace("\"", "").replaceAll("\\r\\n", "");
+                recPersonal = address.getPersonal();
                 if(recPersonal != null){
                     // getAddress() will always return something, getPersonal() may not
                     recPersonal = recPersonal.replace("\"", "").replaceAll("\\r\\n", "");
@@ -473,8 +475,11 @@ public class fix_empty_headers{
                     if(guessGoodValues){
                         if(recAddress.startsWith("<") && recAddress.endsWith(">")){
                             // So the personal name can be found by just stripping
-                            // the carets.
+                            // the carets. Remove extraneous single quotes as well
                             recPersonal = recAddress.substring(1, recAddress.length() - 1);
+                            if(recPersonal.startsWith("'") && recPersonal.endsWith("'")){
+                                recPersonal = recPersonal.substring(1, recPersonal.length() - 1);
+                            }
                             record.addField(new Field(null, personalColumn, recPersonal));
 
                             // If there is a comma, it's likely a name in the format
@@ -485,13 +490,11 @@ public class fix_empty_headers{
                             // first.i.last@abc.com when it should be fist.last@abc.com
                             // but it can be a reasonable first guess for manual
                             // editing later.
-                            if(recAddress.contains(",")){
-                                String[] splitName = recAddress.split(",", 2);
+                            if(recPersonal.contains(",")){
+                                String[] splitName = recPersonal.split(",", 2);
                                 splitName[0] = splitName[0].trim().toLowerCase();
                                 splitName[1] = splitName[1].trim().toLowerCase();
-                                recEmail = splitName[1].substring(0, splitName[1].length() - 1);
-                                recEmail += "." + splitName[0].substring(1, splitName[0].length());
-                                recEmail += "@" + domain;
+                                recEmail = splitName[1] + "." + splitName[0] + "@" + domain;
                                 recEmail = recEmail.replace(" ", ".");
                                 record.addField(new Field(null, emailColumn, recEmail));
                             }
@@ -502,14 +505,18 @@ public class fix_empty_headers{
                     }
                 }
 
-                sheetService.insert(recordFeedUrl, record);
+                try{
+                    sheetService.insert(recordFeedUrl, record);
+                }catch(InvalidEntryException e){
+                    System.out.println("record address [" + recAddress + "] email [" + recEmail + "] personal [" + recPersonal + "]");
+                }
             }
         }catch(IOException e){
-            e.printStackTrace();
-            System.exit(1);
+            System.out.println("record address [" + recAddress + "] email [" + recEmail + "] personal [" + recPersonal + "]");
+            throw e;
         }catch(ServiceException e){
-            e.printStackTrace();
-            System.exit(1);
+            System.out.println("record address [" + recAddress + "] email [" + recEmail + "] personal [" + recPersonal + "]");
+            throw e;
         }
     }
 
@@ -518,6 +525,7 @@ public class fix_empty_headers{
 
         Properties props = System.getProperties();
         props.setProperty("mail.store.protocol", "imaps");
+//        props.setProperty("mail.debug", "true");
         try{
             Session session = Session.getDefaultInstance(props, null);
             Store store = session.getStore("imaps");
@@ -530,6 +538,15 @@ public class fix_empty_headers{
                 createSpreadsheet();
             }
         }catch(MessagingException e){
+            e.printStackTrace();
+            System.exit(1);
+        }catch(ServiceException e){
+            e.printStackTrace();
+            System.exit(1);
+        }catch(UnsupportedEncodingException e){
+            e.printStackTrace();
+            System.exit(1);
+        }catch(IOException e){
             e.printStackTrace();
             System.exit(1);
         }
