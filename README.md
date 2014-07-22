@@ -19,5 +19,3 @@ In the best of all possible worlds, Google would open source their migration uti
 1. support import to gmail addresses and not just google apps addresses
 2. fix the header parsing as it's getting many right but also many wrong
 3. support ost files as well as pst files
-
-*Warning:* The Google Spreadsheets API for table and record feeds [has been deprecated](http://googleappsdeveloper.blogspot.com/2011/03/deprecating-tables-and-records-feeds-in.html) since this code was written.
